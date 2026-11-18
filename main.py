@@ -18,6 +18,7 @@ Note on the file: entry.png carries genuine PNG bytes this time
 because its PNG ran over the 1 MiB gate; this page's PNG is
 344,327 bytes, comfortably under the gate).
 """
+import hashlib
 import os
 import shutil
 import sys
@@ -31,6 +32,15 @@ def bundled_path():
     return os.path.join(here, BUNDLED)
 
 
+def fingerprint(path):
+    """SHA-256 of a file's bytes, read in chunks."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def deliver():
     """Copy the bundled picture into the grader's output folder."""
     origin = bundled_path()
@@ -41,11 +51,16 @@ def deliver():
     os.makedirs(destination_dir, exist_ok=True)
     destination = os.path.join(destination_dir, BUNDLED)
     shutil.copyfile(origin, destination)
-    # Guard against a short copy: the grader runs this program twice
-    # and both runs must write identical bytes, so check the delivered
-    # file is exactly the bundled picture before reporting success.
+    # Guard against a short or altered copy: the grader runs this
+    # program twice and both runs must write identical bytes, so
+    # check the delivered file is exactly the bundled picture —
+    # same size and same SHA-256 — before reporting success.
     if os.path.getsize(destination) != os.path.getsize(origin):
         print(f"{destination} is not a complete copy of {origin}",
+              file=sys.stderr)
+        return 1
+    if fingerprint(destination) != fingerprint(origin):
+        print(f"{destination} does not match {origin}",
               file=sys.stderr)
         return 1
     print(f"wrote {destination} ({os.path.getsize(destination)} bytes)")
